@@ -94,8 +94,8 @@ const ParentDashboard = () => {
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={byEmotion}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" />
-                <YAxis stroke="hsl(var(--muted-foreground))" domain={[0, 100]} />
+                <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" tick={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600 }} />
+                <YAxis stroke="hsl(var(--muted-foreground))" domain={[0, 100]} tick={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600 }} />
                 <Tooltip contentStyle={{ borderRadius: 16, border: "1px solid hsl(var(--border))" }} />
                 <Bar dataKey="accuracy" radius={[12, 12, 0, 0]}>
                   {byEmotion.map((d, i) => <Cell key={i} fill={d.color} />)}
@@ -129,14 +129,16 @@ const ParentDashboard = () => {
           {progress.length === 0 && <Empty msg="Khi bé luyện tập một chút, AI sẽ tóm tắt xu hướng tại đây." />}
           {err && <p className="text-sm text-destructive">{err}</p>}
           {insights && (
-            <ul className="space-y-3">
-              <Insight tone="ok" title="Điểm mạnh" text={insights.strength} />
-              <Insight tone="warn" title="Cần luyện thêm" text={insights.practice} />
-              <Insight tone="ok" title="Bước tiếp theo" text={insights.next_step} />
+            <div className="space-y-3">
+              <ul className="space-y-3">
+                <Insight tone="ok" title="Điểm mạnh" text={insights.strength} />
+                <Insight tone="warn" title="Cần luyện thêm" text={insights.practice} />
+                <Insight tone="ok" title="Bước tiếp theo" text={insights.next_step} />
+              </ul>
               {insights.next_activity && (
                 <Button asChild variant="soft"><Link to={`/app/${insights.next_activity}`}>Mở hoạt động được gợi ý</Link></Button>
               )}
-            </ul>
+            </div>
           )}
           <p className="text-xs text-muted-foreground">Chỉ là gợi ý giáo dục — không phải tư vấn y khoa.</p>
         </div>

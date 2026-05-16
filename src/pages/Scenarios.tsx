@@ -26,6 +26,7 @@ const SCENES: Scene[] = [
 const Scenarios = () => {
   const [i, setI] = useState(0);
   const [pick, setPick] = useState<EmotionKey | null>(null);
+  const [hasFailedThisScene, setHasFailedThisScene] = useState(false);
   const [interacted, setInteracted] = useState(false);
   const scene = SCENES[i];
   const correct = pick === scene.answer;
@@ -45,11 +46,17 @@ const Scenarios = () => {
     setPick(k);
     const isCorrect = k === scene.answer;
     if (user) await logProgress({ userId: user.id, activity: "scenario", emotion: scene.answer, correct: isCorrect });
-    if (isCorrect) { vibrate(15); await addStars(2); }
+    // Chỉ thưởng sao nếu trả lời đúng ngay lần đầu (chưa từng sai ở tình huống này)
+    if (isCorrect) {
+      vibrate(15);
+      if (!hasFailedThisScene) await addStars(2);
+    } else {
+      setHasFailedThisScene(true);
+    }
     setTimeout(() => speak(`${isCorrect ? "Đúng rồi. " : "Suy nghĩ tốt lắm. "}${scene.why}`), 200);
   };
 
-  const next = () => { setPick(null); setI((i + 1) % SCENES.length); };
+  const next = () => { setPick(null); setHasFailedThisScene(false); setI((i + 1) % SCENES.length); };
   const retry = () => { setPick(null); };
 
   const correctEmotion = getEmotion(scene.answer);

@@ -13,11 +13,12 @@ import { useSpeak, vibrate } from "@/lib/speech";
 const shuffle = <T,>(arr: T[]) => [...arr].sort(() => Math.random() - 0.5);
 
 const MatchingGame = () => {
-  const pool = useMemo(() => EMOTIONS.slice(0, 5), []);
+  const pool = useMemo(() => EMOTIONS.slice(0, 6), []);
   const [labels, setLabels] = useState(() => shuffle(pool));
   const [matched, setMatched] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
+  const [wrongKey, setWrongKey] = useState<string | null>(null);
   const { user } = useAuth();
   const { addStars } = useProfile();
   const { speak } = useSpeak();
@@ -29,9 +30,9 @@ const MatchingGame = () => {
       notify.success("Hoàn thành! Tuyệt vời 🎉");
       speak("Hoàn thành! Tuyệt vời");
       vibrate([20, 50, 20]);
-      addStars(3);
+      if (user) addStars(3);
     }
-  }, [matched, pool.length, completed, speak, addStars]);
+  }, [matched, pool.length, completed, speak, addStars, user]);
 
   const onFace = (key: string) => {
     if (selected === key) { setSelected(null); return; }
@@ -57,13 +58,16 @@ const MatchingGame = () => {
       if (user) await addStars(1);
       setSelected(null);
     } else {
+      vibrate([10, 40, 10]);
+      setWrongKey(key);
+      window.setTimeout(() => setWrongKey((k) => (k === key ? null : k)), 500);
       speak("Thử lại nhé");
       notify.info("Gần đúng rồi! Thử lại nhé 💛");
     }
   };
 
   const reset = () => {
-    setMatched({}); setLabels(shuffle(pool)); setSelected(null); setCompleted(false);
+    setMatched({}); setLabels(shuffle(pool)); setSelected(null); setCompleted(false); setWrongKey(null);
   };
 
   return (
@@ -92,7 +96,7 @@ const MatchingGame = () => {
                   whileTap={{ scale: 0.94 }}
                   disabled={done}
                   onClick={() => onFace(e.key)}
-                  aria-label={e.label}
+                  aria-label={done ? `${e.label} — đã ghép` : e.label}
                   aria-pressed={isSel}
                   className={`relative aspect-square min-h-[88px] rounded-3xl bg-card shadow-soft flex items-center justify-center p-3 border-4 transition-all focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/40 ${
                     isSel ? "border-primary ring-4 ring-primary/30" : "border-transparent"
@@ -107,17 +111,23 @@ const MatchingGame = () => {
         </div>
 
         <div className="card-soft p-5 space-y-3">
-          <h2 className="font-display font-bold text-lg">Từ ngữ</h2>
-          <div className="grid grid-cols-2 gap-3">
+          <h2 className="font-display font-bold text-lg flex items-center gap-2"><Sparkles className="w-5 h-5 text-primary" /> Từ ngữ</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {labels.map(e => {
               const done = Object.values(matched).includes(e.key);
+              const isWrong = wrongKey === e.key;
               return (
                 <motion.button
                   key={e.key}
                   whileTap={{ scale: 0.94 }}
+                  animate={isWrong ? { x: [0, -8, 8, -6, 6, 0] } : { x: 0 }}
+                  transition={{ duration: 0.45 }}
                   disabled={done}
                   onClick={() => onLabel(e.key)}
-                  className={`min-h-[64px] rounded-2xl bg-card border-2 border-border shadow-soft px-4 py-5 font-display text-xl font-bold transition-all hover:shadow-float focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/40 ${done ? "opacity-50 line-through" : ""}`}
+                  aria-label={done ? `${e.label} — đã ghép` : e.label}
+                  className={`min-h-[64px] rounded-2xl bg-card border-2 shadow-soft px-4 py-5 font-display text-xl font-bold transition-colors hover:shadow-float focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/40 ${
+                    done ? "opacity-50 line-through border-border" : isWrong ? "border-destructive bg-destructive/10" : "border-border"
+                  }`}
                 >
                   {e.label}
                 </motion.button>

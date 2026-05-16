@@ -16,13 +16,13 @@ import foxAv from "@/assets/avatars/fox.png";
 import robotAv from "@/assets/avatars/robot.png";
 
 const navItems = [
-  { to: "/app", label: "Trang chủ", icon: Home, end: true },
-  { to: "/app/learn", label: "Học", icon: Map },
-  { to: "/app/camera", label: "Camera", icon: Camera },
-  { to: "/app/stories", label: "Truyện", icon: BookOpen },
-  { to: "/app/journal", label: "Nhật ký", icon: Heart },
-  { to: "/app/rewards", label: "Thưởng", icon: Sparkles },
-  { to: "/app/parent", label: "Phụ huynh", icon: BarChart3 },
+  { to: "/app", shortLabel: "Nhà", label: "Trang chủ", icon: Home, end: true },
+  { to: "/app/learn", shortLabel: "Học", label: "Học", icon: Map },
+  { to: "/app/camera", shortLabel: "Camera", label: "Camera", icon: Camera },
+  { to: "/app/stories", shortLabel: "Truyện", label: "Truyện", icon: BookOpen },
+  { to: "/app/journal", shortLabel: "Nhật ký", label: "Nhật ký", icon: Heart },
+  { to: "/app/rewards", shortLabel: "Thưởng", label: "Thưởng", icon: Sparkles },
+  { to: "/app/parent", shortLabel: "Bố mẹ", label: "Phụ huynh", icon: BarChart3 },
 ];
 
 const AVATAR_IMG: Record<string, string> = {
@@ -54,6 +54,9 @@ export const AppLayout = () => {
     const TOP_THRESHOLD = 80;
 
     const onScroll = () => {
+      // Trên desktop (md+), nav là sticky → xóa khỏi DOM gây layout shift & scroll jump.
+      // Chỉ auto-hide trên mobile (nav là fixed, không ảnh hưởng layout).
+      if (window.innerWidth >= 768) return;
       if (ticking) return;
       ticking = true;
       requestAnimationFrame(() => {
@@ -139,7 +142,7 @@ export const AppLayout = () => {
             className="pointer-events-none fixed inset-x-0 bottom-[calc(0.5rem+env(safe-area-inset-bottom))] z-40 px-2 md:sticky md:top-16 md:bottom-auto md:z-20 md:px-0 md:py-3 md:pointer-events-auto"
             aria-label="Điều hướng chính"
           >
-            <div className="card-3d pointer-events-auto mx-auto grid w-full max-w-[34rem] grid-cols-7 gap-1 px-1.5 py-1.5 md:max-w-4xl">
+            <div className="card-3d pointer-events-auto mx-auto grid w-full max-w-[34rem] grid-cols-7 gap-0.5 px-1 py-1.5 sm:gap-1 sm:px-1.5 md:max-w-4xl">
               {navItems.map((it) => {
                 const active = it.end ? pathname === it.to : pathname.startsWith(it.to);
                 return (
@@ -147,19 +150,21 @@ export const AppLayout = () => {
                     key={it.to}
                     to={it.to}
                     end={it.end as any}
+                    aria-label={it.label}
                     aria-current={active ? "page" : undefined}
                     className="min-w-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <motion.div
                       whileTap={{ scale: profile?.reduced_motion ? 1 : 0.92 }}
                       className={cn(
-                        "flex h-[58px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl px-1.5 py-1.5 transition-colors md:h-[62px] md:px-3",
+                        "flex h-[60px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl px-0.5 py-1.5 transition-colors sm:px-1.5 md:h-[62px] md:px-3",
                         active ? "bg-gradient-sky shadow-soft" : "hover:bg-muted",
                       )}
                     >
-                      <it.icon className={cn("h-5 w-5 md:h-6 md:w-6", active ? "text-primary" : "text-muted-foreground")} />
-                      <span className={cn("max-w-full truncate text-[10px] font-display font-semibold leading-tight md:text-[11px]", active ? "text-primary" : "text-muted-foreground")}>
-                        {it.label}
+                      <it.icon className={cn("h-5 w-5 shrink-0 md:h-6 md:w-6", active ? "text-primary" : "text-muted-foreground")} />
+                      <span className={cn("block max-w-full truncate text-[10px] font-display font-semibold leading-tight md:text-[11px]", active ? "text-primary" : "text-muted-foreground")}>
+                        <span className="sm:hidden">{it.shortLabel}</span>
+                        <span className="hidden sm:inline">{it.label}</span>
                       </span>
                     </motion.div>
                   </NavLink>
