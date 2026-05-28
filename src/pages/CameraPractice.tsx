@@ -1,19 +1,33 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Mascot } from "@/components/Mascot";
 import { Camera as CamIcon, CameraOff, RefreshCw, ShieldCheck, Loader2 } from "lucide-react";
-import { EMOTIONS, type EmotionKey, getEmotion } from "@/data/emotions";
+import { type EmotionKey, getEmotion } from "@/data/emotions";
 import { motion } from "framer-motion";
+import { Link, useSearchParams } from "react-router-dom";
 import { detectExpression, loadFaceModels, mapToAppEmotion } from "@/lib/faceDetect";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { logProgress } from "@/lib/progress";
 import { useSpeak, vibrate } from "@/lib/speech";
+import { getLessonById, lessonHref, ALL_LESSONS } from "@/data/lessons";
+import { bumpLesson } from "@/lib/lessonProgress";
+import { SmartImage } from "@/components/SmartImage";
 
-const PROMPTS: EmotionKey[] = ["happy", "surprised", "sad", "calm", "angry"];
+const DEFAULT_PROMPTS: EmotionKey[] = ["happy", "surprised", "sad", "calm", "angry"];
 
 const CameraPractice = () => {
+  const [params] = useSearchParams();
+  const lessonId = params.get("lesson");
+  const lesson = useMemo(() => (lessonId ? getLessonById(lessonId) : undefined), [lessonId]);
+
+  const PROMPTS: EmotionKey[] = useMemo(() => {
+    return (lesson?.emotions ?? DEFAULT_PROMPTS) as EmotionKey[];
+  }, [lesson]);
+
+  const useReal = lesson?.imageMode === "real";
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [on, setOn] = useState(false);
@@ -27,11 +41,20 @@ const CameraPractice = () => {
   const { addStars } = useProfile();
   const { speak } = useSpeak();
 
-  const target = getEmotion(PROMPTS[promptIdx]);
+  const target = getEmotion(PROMPTS[promptIdx % PROMPTS.length]);
+  const threshold = lesson?.threshold ?? PROMPTS.length;
+  const lessonComplete = doneCount >= threshold;
 
   useEffect(() => {
     loadFaceModels().then(() => setModelsReady(true)).catch(() => setModelsReady(false));
   }, []);
+
+  // Reset khi đổi lesson
+  useEffect(() => {
+    setPromptIdx(0);
+    setResult(null);
+    setDoneCount(0);
+  }, [lessonId]);
 
   // Đọc prompt sau khi camera đã bật (đã có tương tác)
   useEffect(() => {
@@ -79,7 +102,11 @@ const CameraPractice = () => {
       const detectedLabel = getEmotion(mapped as EmotionKey).label;
       setResult({ emotion: mapped as EmotionKey, score: det.confidence });
       speak(matched ? `Tuyệt vời! ${detectedLabel}` : `Mình thấy ${detectedLabel}. Thử lại nhé`);
-      if (matched) { vibrate([15, 40, 15]); setDoneCount(c => c + 1); }
+      if (matched) {
+        vibrate([15, 40, 15]);
+        setDoneCount(c => c + 1);
+        if (lesson) bumpLesson(lesson.id, lesson.threshold, true);
+      }
 
       if (user) {
         await supabase.from("camera_attempts").insert({
@@ -97,19 +124,38 @@ const CameraPractice = () => {
     }
   };
 
-  const next = () => { setResult(null); setError(null); setPromptIdx((promptIdx + 1) % PROMPTS.length); };
+  const next = () => {
+    setResult(null);
+    setError(null);
+    setPromptIdx((promptIdx + 1) % PROMPTS.length);
+  };
+
   const detected = result ? getEmotion(result.emotion) : null;
   const isMatch = result?.emotion === target.key;
+
+  const nextLessonHref = (() => {
+    if (!lesson) return "/app/learn";
+    const idx = ALL_LESSONS.findIndex(l => l.id === lesson.id);
+    const next = ALL_LESSONS[idx + 1];
+    return next ? lessonHref(next) : "/app/learn";
+  })();
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="font-display text-3xl md:text-4xl font-bold">Luyện qua camera</h1>
-          <p className="text-muted-foreground">Hãy thể hiện cảm xúc bằng khuôn mặt. AI chạy ngay trên thiết bị · không gửi đi đâu cả.</p>
+          <h1 className="font-display text-3xl md:text-4xl font-bold">
+            {lesson ? lesson.title : "Luyện qua camera"}
+          </h1>
+          <p className="text-muted-foreground">
+            Hãy thể hiện cảm xúc bằng khuôn mặt. AI chạy ngay trên thiết bị · không gửi đi đâu cả.
+          </p>
+          {lesson?.tip && (
+            <p className="text-sm text-foreground/70 mt-1">💡 {lesson.tip}</p>
+          )}
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-card border border-border px-3 py-1.5 font-display text-sm shadow-soft min-h-[40px]">
-          ✅ {doneCount}/{PROMPTS.length} mục tiêu
+          ✅ {doneCount}/{threshold} mục tiêu
         </span>
       </div>
 
@@ -121,7 +167,11 @@ const CameraPractice = () => {
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center p-6">
                 <CamIcon className="w-12 h-12 text-muted-foreground" />
                 <p className="font-display text-lg">Camera đang tắt</p>
-                {!modelsReady && <p className="text-xs text-muted-foreground inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Đang tải AI...</p>}
+                {!modelsReady && (
+                  <p className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Đang tải AI...
+                  </p>
+                )}
                 {error && <p className="text-sm text-destructive max-w-xs">{error}</p>}
               </div>
             )}
@@ -148,10 +198,20 @@ const CameraPractice = () => {
             ) : (
               <>
                 <Button variant="hero" size="lg" onClick={analyze} disabled={analyzing}>
-                  {analyzing ? <><RefreshCw className="animate-spin" /> Đang xem...</> : <>✨ Kiểm tra khuôn mặt</>}
+                  {analyzing ? (
+                    <>
+                      <RefreshCw className="animate-spin" /> Đang xem...
+                    </>
+                  ) : (
+                    <>✨ Kiểm tra khuôn mặt</>
+                  )}
                 </Button>
-                <Button variant="soft" size="lg" onClick={next} disabled={analyzing}>Bỏ qua</Button>
-                <Button variant="outline" size="lg" onClick={stop}><CameraOff /> Tắt</Button>
+                <Button variant="soft" size="lg" onClick={next} disabled={analyzing}>
+                  Bỏ qua
+                </Button>
+                <Button variant="outline" size="lg" onClick={stop}>
+                  <CameraOff /> Tắt
+                </Button>
               </>
             )}
           </div>
@@ -166,9 +226,39 @@ const CameraPractice = () => {
           <div className={`card-soft p-5 ${target.color}`}>
             <p className="font-display text-sm uppercase tracking-wide">Hãy thử</p>
             <div className="flex items-center gap-3 mt-1">
-              <img src={target.image} alt={target.label} loading="lazy" width={80} height={80} className="w-16 h-16 object-contain drop-shadow-[0_8px_10px_hsl(218_60%_40%/0.25)]" />
+              <div className="w-16 h-16 rounded-2xl overflow-hidden bg-card/40 shadow-soft shrink-0">
+                {useReal ? (
+                  <SmartImage
+                    sources={target.realImages}
+                    fallback={target.image}
+                    alt={target.label}
+                    className="rounded-2xl"
+                  />
+                ) : (
+                  <img
+                    src={target.image}
+                    alt={target.label}
+                    loading="lazy"
+                    width={80}
+                    height={80}
+                    className="w-full h-full object-contain drop-shadow-[0_8px_10px_hsl(218_60%_40%/0.25)]"
+                  />
+                )}
+              </div>
               <h2 className="font-display text-3xl font-bold">Thể hiện: {target.label}</h2>
             </div>
+            {target.faceCues?.length > 0 && (
+              <ul className="flex flex-wrap gap-1.5 mt-3">
+                {target.faceCues.map(c => (
+                  <li
+                    key={c}
+                    className="text-[11px] font-display rounded-full bg-card/70 px-2 py-0.5"
+                  >
+                    {c}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {result && detected && (
@@ -186,12 +276,24 @@ const CameraPractice = () => {
                   {isMatch ? "Tuyệt vời! +2 ngôi sao 🌟" : "Cố gắng tốt lắm! Thử lại nhé 💛"}
                 </p>
               </div>
-              <Button variant="soft" size="lg" className="w-full" onClick={next}>Lượt tiếp theo</Button>
+              <Button variant="soft" size="lg" className="w-full" onClick={next}>
+                Lượt tiếp theo
+              </Button>
             </motion.div>
           )}
 
-          {!result && (
+          {!result && !lessonComplete && (
             <Mascot size={140} message={on ? "Cười tươi khi sẵn sàng nhé!" : "Bấm nút lớn để bắt đầu."} />
+          )}
+
+          {lessonComplete && (
+            <div className="card-3d p-5 bg-gradient-mint text-center space-y-2">
+              <h3 className="font-display text-xl font-bold">Hoàn thành bài học! 🎉</h3>
+              <p className="text-foreground/80 text-sm">Bạn đã thể hiện đúng đủ số mục tiêu.</p>
+              <Button asChild variant="hero" className="w-full">
+                <Link to={nextLessonHref}>Bài tiếp theo</Link>
+              </Button>
+            </div>
           )}
         </div>
       </div>
